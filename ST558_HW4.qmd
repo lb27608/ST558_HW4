@@ -1,0 +1,159 @@
+---
+title: "ST 558 Homework 4: Reading and Manipulating Data"
+author: "Lee Bennett"
+format: html
+editor: visual
+---
+
+## Task 1: Conceptual Questions
+
+1.  If your working directory is `myfolder/homework`, what *relative* path would you specify to get the file located at `myfolder/MyData.csv`?
+
+> The path would be `../MyData.csv`.
+
+2.  What are the major benefits of using R projects?
+
+> An R project includes a unique working directory, workspace, and folder structure that can easily be shared because all files and subfolders within the project have the same relative path to the main project folder. R projects also allow for different workstreams or analyses to be separated from each other to prevent overlap.
+
+3.  What is git and what is github?
+
+> Git is a version control system that allows you to track files in a designated folder called a repository. Github  is web-based hosting service that allows for those repositories to be stored remotely.
+
+4.  What are the two main differences between a `tibble` and a `data.frame`?
+
+> The main differences are that 1) when viewed, tibbles show only the first several rows of data and columns of variables, along with the associated data type for each column, and 2) they are "lazy" in the sense that they are strict about subsetting, etc., so errors can be found earlier in the programming process.
+
+5.  Rewrite the following nested function call using `BaseR`'s chaining operator:
+
+`arrange(filter(select(as_tibble(iris), starts_with("Petal"),Species),                Petal.Length < 1.55),Species)`
+
+> The chain for this sequence of function calls would be `as_tibble(iris) |> select(starts_with("Petal"),Species) |> filter(Petal.Length<1.55) |> arrange(Species)`
+
+## Task 2: Reading Delimited Data
+
+
+```{r}
+#| include: false
+
+library(readr)
+library(readxl)
+library(tidyverse)
+```
+### Glass data
+
+1.  The `glass.data` data set is a comma-delimited file, so we'll use the `read_csv` function to load the data into a tibble:
+
+```{r}
+glass <- read_csv(file="https://www4.stat.ncsu.edu/~online/datasets/glass.data",col_names=c("id","RI","Na","Mg",
+                  "Al","Si","K","Ca","Ba","Fe","Type_of_Glass"))
+```
+
+2.  Next, we'd like to overwrite the numeric variable `Type_of_glass` with a character string version using the `mutate` function: 
+
+```{r}
+glass |> mutate(Type_of_Glass=ifelse(Type_of_Glass == 1, "building_windows_float_processed",
+                              ifelse(Type_of_Glass == 2, "building_windows_non_float_processed",
+                              ifelse(Type_of_Glass == 3, "vehicle_windows_float processed",
+                              ifelse(Type_of_Glass == 4, "vehicle_windows_non_float_processed",
+                              ifelse(Type_of_Glass == 5, "containers",
+                              ifelse(Type_of_Glass == 6, "tableware",
+                              ifelse(Type_of_Glass == 7, "headlamps","other"))))))))
+
+```
+
+3.  Finally, we'll add to this chain in order to filter the data, keeping only observations having an `Fe` value less than 0.2:
+
+```{r}
+glass |> mutate(Type_of_Glass=ifelse(Type_of_Glass == 1, "building_windows_float_processed",
+                              ifelse(Type_of_Glass == 2, "building_windows_non_float_processed",
+                              ifelse(Type_of_Glass == 3, "vehicle_windows_float processed",
+                              ifelse(Type_of_Glass == 4, "vehicle_windows_non_float_processed",
+                              ifelse(Type_of_Glass == 5, "containers",
+                              ifelse(Type_of_Glass == 6, "tableware",
+                              ifelse(Type_of_Glass == 7, "headlamps","other")))))))) |> filter(Fe<0.2)
+```
+
+### Yeast data
+
+1.  The yeast data is space-delimited, so we will use `read_table` to create a tibble:
+
+```{r}
+yeast <- read_table(file="https://www4.stat.ncsu.edu/~online/datasets/yeast.data",col_names=c("seq_name","mcg","gvh","alm","mit","erl","pox","vac","nuc","class"))
+```
+
+2.  Next, we'll remove the `seq_name` and `nuc` columns:
+
+```{r}
+yeast |> select(!c(seq_name,nuc))
+```
+
+3.  Finally, we'll add columns to summarize the mean and median of each remaining numeric variable, grouped by `class`:
+
+```{r}
+yeast |> select(!c(seq_name,nuc)) |> group_by(class) |> mutate(across(where(is.numeric), list(mean=mean,median=median), .names="{.col}_{.fn}"))
+```
+
+
+## Task 3: Combining Excel and Delimited Data
+
+### Red and White Wine Data
+
+1.  First, we read in the white wine data from the downloaded file located in the repo working directory:
+```{r}
+white_wine <- read_excel("white-wine.xlsx")
+white_wine
+```
+
+2.  To fix the non-standard variable names, we then extract the new names from the second sheet of the Excel workbook and use `colnames` to change the variable names in the tibble:
+```{r}
+ww_names <- read_excel("white-wine.xlsx",sheet=excel_sheets("white-wine.xlsx")[2])
+colnames(white_wine) <- as_vector(ww_names)
+white_wine
+```
+
+3.  Finally, we'll add a column called `wine_type` to indicate that all of these wines are white:
+
+```{r}
+white_wine_2 <- white_wine |> mutate(wine_type="white")
+```
+
+
+4.  We'll now read in the semicolon-delimited red wine data and carry out the same tibble modifications that were done for the white wine data:
+```{r}
+red_wine <- read_delim(file="https://www4.stat.ncsu.edu/~online/datasets/red-wine.csv",delim=";")
+colnames(red_wine) <- as_vector(ww_names)
+red_wine_2 <- red_wine |> mutate(wine_type="red")
+red_wine_2
+```
+
+
+### Combined Wine Data
+
+5.  The two tibbles for the wine data can now be combined into a single tibble using `bind_rows`:
+```{r}
+combined_wine <- bind_rows(white_wine_2,red_wine_2)
+```
+
+6.  Next, we'll create a chain to filter the wine data based on a number of criteria, starting with quality and alcohol content:
+
+```{r}
+combined_wine |> filter(quality > 6.5 & alcohol<132)
+```
+
+7.  Now we sort the remaining wines by quality:
+
+```{r}
+combined_wine |> filter(quality > 6.5 & alcohol<132) |> arrange(desc(quality))
+```
+
+8.  Next, we retain only the variables that contain `acid` and the variables `alcohol`,`wine_type` and `quality`:
+
+```{r}
+combined_wine |> filter(quality > 6.5 & alcohol<132) |> arrange(desc(quality)) |> select(contains("acidity"),alcohol,wine_type, quality)
+```
+
+9.  Finally, we'll add the mean and standard deviation of the `alcohol` variable grouped by `quality`:
+
+```{r}
+combined_wine |> filter(quality > 6.5 & alcohol<132) |> arrange(desc(quality)) |> select(contains("acidity"),alcohol,wine_type, quality) |> group_by(quality) |> mutate(mean_alcohol=mean(alcohol), sd_alcohol=sd(alcohol))
+```
